@@ -118,6 +118,8 @@ struct ASLRLib {
     void* originalLibBase;
 };
 
+bool aslr_enabled = false;
+
 extern "C"
 {
 __attribute__((weak))
@@ -161,9 +163,21 @@ __attribute__((weak))
     }
 }
 
+__attribute__((weak))
+ASLRLib* aslr_dl_enable() {
+    aslr_enabled = true;
+}
+__attribute__((weak))
+ASLRLib* aslr_dl_disable() {
+    aslr_enabled = false;
+}
+
 
 __attribute__((weak))
-ASLRLib* aslr_dlopen(const char* libName, int flag) {
+void* aslr_dlopen(const char* libName, int flag) {
+    if (!aslr_enabled) {
+        return dlopen(libName, flag);
+    }
     auto it = libInfo.find(libName);
     if (it == libInfo.end()) {
         // forcibly load - use RTLD_NOW always, not sure how delayed load would work here
@@ -210,13 +224,21 @@ ASLRLib* aslr_dlopen(const char* libName, int flag) {
 }
 
 __attribute__((weak))
-void aslr_dlclose(ASLRLib* lib) {
+int aslr_dlclose(ASLRLib* lib) {
+    if (!aslr_enabled) {
+        return dlclose(lib);
+    }
     munmap(lib->libBase, lib->length);
     delete lib;
+    return 0;
 }
 
 __attribute__((weak))
 void* aslr_dlsym(ASLRLib* lib, const char *symbol) {
+    if (!aslr_enabled) {
+        return dlsym(lib, symbol);
+    }
+
     void* sym = dlsym(lib->originalLib, symbol);
     if (!sym) {
         return sym;
