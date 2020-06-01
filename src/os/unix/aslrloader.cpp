@@ -164,11 +164,11 @@ __attribute__((weak))
 }
 
 __attribute__((weak))
-ASLRLib* aslr_dl_enable() {
+void aslr_dl_enable() {
     aslr_enabled = true;
 }
 __attribute__((weak))
-ASLRLib* aslr_dl_disable() {
+void aslr_dl_disable() {
     aslr_enabled = false;
 }
 
