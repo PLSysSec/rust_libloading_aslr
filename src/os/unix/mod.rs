@@ -13,16 +13,16 @@ extern "C" {
     fn rust_libloading_dlerror_mutex_unlock();
 }
 
-fn rust_aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void {
-    unsafe { aslr_dlopen(filename, flags) }
+unsafe fn rust_aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void {
+    aslr_dlopen(filename, flags)
 }
 
-fn rust_aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int {
-    unsafe { aslr_dlclose(handle)}
+unsafe fn rust_aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int {
+    aslr_dlclose(handle)
 }
 
-fn rust_aslr_dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void {
-    unsafe { aslr_dlsym(handle, symbol) }
+unsafe fn rust_aslr_dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void {
+    aslr_dlsym(handle, symbol)
 }
 
 
