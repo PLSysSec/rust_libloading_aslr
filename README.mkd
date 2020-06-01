@@ -1,5 +1,10 @@
 # libloading [![Travis CI][tcii]][tci] [![Appveyor CI][acii]][aci]
 
+A fork of libloading that adds aslr support to loading of shared libraries
+
+---------------------------
+
+
 [tcii]: https://travis-ci.org/nagisa/rust_libloading.svg?branch=master
 [tci]: https://travis-ci.org/nagisa/rust_libloading
 [acii]: https://ci.appveyor.com/api/projects/status/cnncnu58qcxb1ikf/branch/master?svg=true

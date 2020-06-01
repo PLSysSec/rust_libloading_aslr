@@ -24,6 +24,12 @@ fn main(){
             ::std::process::exit(0xfc);
         }
     }
+
+    cc::Build::new()
+        .cpp(true)
+        .file("src/os/unix/aslrloader.cpp")
+        .compile("aslrloader");
+
     if is_unix {
         cc::Build::new()
             .file("src/os/unix/global_static.c")

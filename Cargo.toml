@@ -1,5 +1,5 @@
 [package]
-name = "libloading"
+name = "libloading_aslr"
 version = "0.5.2"
 authors = ["Simonas Kazlauskas <libloading@kazlauskas.me>"]
 build = "build.rs"

@@ -6,9 +6,25 @@ use std::os::raw;
 use std::os::unix::ffi::OsStrExt;
 
 extern "C" {
+    fn aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void;
+    fn aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int;
+    fn aslr_dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void;
     fn rust_libloading_dlerror_mutex_lock();
     fn rust_libloading_dlerror_mutex_unlock();
 }
+
+fn rust_aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void {
+    unsafe { aslr_dlopen(filename, flags) }
+}
+
+fn rust_aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int {
+    unsafe { aslr_dlclose(handle)}
+}
+
+fn rust_aslr_dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void {
+    unsafe { aslr_dlsym(handle, symbol) }
+}
+
 
 struct DlerrorMutexGuard(());
 
@@ -128,7 +144,7 @@ impl Library {
         };
         with_dlerror(move || {
             let result = unsafe {
-                let r = dlopen(match filename {
+                let r = rust_aslr_dlopen(match filename {
                     None => ptr::null(),
                     Some(ref f) => f.as_ptr()
                 }, flags);
@@ -176,7 +192,7 @@ impl Library {
         // fully prevent it.
         match with_dlerror(|| {
             dlerror();
-            let symbol = dlsym(self.handle, symbol.as_ptr());
+            let symbol = rust_aslr_dlsym(self.handle, symbol.as_ptr());
             if symbol.is_null() {
                 None
             } else {
@@ -221,7 +237,7 @@ impl Library {
 
 impl Drop for Library {
     fn drop(&mut self) {
-        with_dlerror(|| if unsafe { dlclose(self.handle) } == 0 {
+        with_dlerror(|| if unsafe { rust_aslr_dlclose(self.handle) } == 0 {
             Some(())
         } else {
             None
@@ -310,9 +326,9 @@ impl<T> fmt::Debug for Symbol<T> {
 // Platform specific things
 
 extern {
-    fn dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void;
-    fn dlclose(handle: *mut raw::c_void) -> raw::c_int;
-    fn dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void;
+    // fn dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void;
+    // fn dlclose(handle: *mut raw::c_void) -> raw::c_int;
+    // fn dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void;
     fn dlerror() -> *mut raw::c_char;
     fn dladdr(addr: *mut raw::c_void, info: *mut DlInfo) -> raw::c_int;
 }
