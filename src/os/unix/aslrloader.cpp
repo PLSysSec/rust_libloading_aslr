@@ -41,6 +41,8 @@ static uint64_t parseHex(std::string val) {
     return x;
 }
 
+// A line looks like the following
+// 7f906d9aa000-7f906db91000 r-xp 00000000 103:01 13272328                  /lib/x86_64-linux-gnu/libc-2.27.so
 static RangeLine parseLine(std::string line) {
     RangeLine ret;
 
@@ -193,7 +195,7 @@ void* aslr_dlopen(const char* libName, int flag) {
         it = libInfo.find(libName);
         if (it == libInfo.end()) {
             // still couldn't find the lib
-            abort();
+            return nullptr;
         }
     }
 
@@ -213,7 +215,7 @@ void* aslr_dlopen(const char* libName, int flag) {
     // printf("total_size: %lu\n", (uint64_t)total_size);
     char* target = (char*) mmap(NULL, total_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (!target || target == MAP_FAILED) {
-        abort();
+        return nullptr;
     }
 
     for(auto& r : ranges) {
