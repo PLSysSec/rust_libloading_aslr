@@ -19,14 +19,14 @@
 #include <algorithm>
 #include <map>
 #include <vector>
+#include <random>
 #include <string>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 
-#define CHECK(x) if (!(x)) { abort(); }
-
 struct RangeLine {
+    bool found;
     uint64_t start;
     uint64_t end;
     std::string flags;
@@ -51,7 +51,8 @@ static RangeLine parseLine(std::string line) {
 
     std::string::size_type pos = range.find('-');
     if(range.npos == pos) {
-        abort();
+        ret.found = false;
+        return ret;
     } else {
         ret.start = parseHex(range.substr(0, pos));
         ret.end = parseHex(range.substr(pos + 1));
@@ -69,7 +70,7 @@ static RangeLine parseLine(std::string line) {
     // std::cout << "Substring: " << ret.end << std::endl;
     // std::cout << "Substring: " << ret.flags << std::endl;
     // std::cout << "Substring: " << ret.path << std::endl;
-
+    ret.found = true;
     return ret;
 }
 
@@ -84,12 +85,8 @@ static RangeLine parseLine(std::string line) {
         while (std::getline(file, line))
         {
             auto ret = parseLine(line);
-            if (ret.flags[0] == 'r') {
+            if (ret.found && ret.flags[0] == 'r') {
                 ranges.emplace_back(ret);
-            }
-            else {
-                int a = 1;
-                (void)a;
             }
         }
         file.close();
@@ -113,6 +110,7 @@ std::map<std::string, LoadedLibInfo> libInfo;
 
 struct ASLRLib {
     void* libBase;
+    uint32_t offset;
     uint64_t length;
     void* originalLib;
     void* originalLibBase;
@@ -172,6 +170,11 @@ void aslr_dl_disable() {
     aslr_enabled = false;
 }
 
+#define PAGE_SIZE (4 * 1024)
+static std::random_device dev;
+static std::mt19937 rng(dev());
+static std::uniform_int_distribution<std::mt19937::result_type> dist(0, (PAGE_SIZE/16) - 1);
+
 
 __attribute__((weak))
 void* aslr_dlopen(const char* libName, int flag) {
@@ -198,7 +201,14 @@ void* aslr_dlopen(const char* libName, int flag) {
     std::vector<Range>& ranges = curr.library_ranges;
     char* start = ranges[0].start;
     char* end = ranges[ranges.size() - 1].end;
-    auto total_size = end - start;
+    size_t total_size = end - start;
+
+    // we are also going to copy pages starting at a random offset in the page
+    // so add one extra page to catch the spill overs
+    total_size += PAGE_SIZE;
+
+    // we want an alignment of 16, so we pick a value between 0 and PAGE_SIZE/16 and multiply by 16
+    uint32_t chosen_page_offset = dist(rng) * 16;
 
     // printf("total_size: %lu\n", (uint64_t)total_size);
     char* target = (char*) mmap(NULL, total_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -207,7 +217,7 @@ void* aslr_dlopen(const char* libName, int flag) {
     }
 
     for(auto& r : ranges) {
-        uint64_t offset = r.start - start;
+        uint64_t offset = r.start - start + chosen_page_offset;
         uint64_t size = r.end - r.start;
         // printf("target + offset: %p\n", (void*)(target + offset));
         // printf("r.start: %p\n", (void*)(r.start));
@@ -217,6 +227,7 @@ void* aslr_dlopen(const char* libName, int flag) {
 
     auto ret = new ASLRLib;
     ret->libBase = target;
+    ret->offset = chosen_page_offset;
     ret->length = total_size;
     ret->originalLib = curr.originalLib;
     ret->originalLibBase = start;
@@ -243,7 +254,7 @@ void* aslr_dlsym(ASLRLib* lib, const char *symbol) {
     if (!sym) {
         return sym;
     }
-    auto address = ((char*) sym - (char*) lib->originalLibBase) + (char*) lib->libBase;
+    auto address = ((char*) sym - (char*) lib->originalLibBase) + (char*) lib->libBase + lib->offset;
     return address;
 }
 
