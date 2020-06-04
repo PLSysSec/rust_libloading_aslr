@@ -2,6 +2,13 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+
+// Hack for mozilla code. Firefox wraps standard libs but does not include the libs when linking rust packages
+// So disable this for now.
+#define mozilla_mozalloc_h
+#define mozilla_throw_gcc_h
+#define mozilla_mozalloc_abort_h
+
 #include <link.h>
 #include <stdlib.h>
 #include <stdio.h>
