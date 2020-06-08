@@ -140,7 +140,7 @@ impl Library {
     where P: AsRef<OsStr> {
         let filename = match filename {
             None => None,
-            Some(ref f) => Some(try!(cstr_cow_from_bytes(f.as_ref().as_bytes()))),
+            Some(ref f) => Some(cstr_cow_from_bytes(f.as_ref().as_bytes())?),
         };
         with_dlerror(move || {
             let result = unsafe {
@@ -183,7 +183,7 @@ impl Library {
     /// impossible. Using a TLS variable loaded this way on OS X is undefined behaviour.
     pub unsafe fn get<T>(&self, symbol: &[u8]) -> ::Result<Symbol<T>> {
         ensure_compatible_types::<T, *mut raw::c_void>();
-        let symbol = try!(cstr_cow_from_bytes(symbol));
+        let symbol = cstr_cow_from_bytes(symbol)?;
         // `dlsym` may return nullptr in two cases: when a symbol genuinely points to a null
         // pointer or the symbol cannot be found. In order to detect this case a double dlerror
         // pattern must be used, which is, sadly, a little bit racy.
@@ -305,7 +305,7 @@ impl<T> ::std::ops::Deref for Symbol<T> {
 impl<T> fmt::Debug for Symbol<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         unsafe {
-            let mut info: DlInfo = mem::uninitialized();
+            let mut info: DlInfo = mem::MaybeUninit::uninit().assume_init();  // TODO more safe would be with assume_init at end of this unsafe block
             if dladdr(self.pointer, &mut info) != 0 {
                 if info.dli_sname.is_null() {
                     f.write_str(&format!("Symbol@{:p} from {:?}",
