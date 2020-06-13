@@ -6,15 +6,15 @@ use std::os::raw;
 use std::os::unix::ffi::OsStrExt;
 
 extern "C" {
-    fn aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void;
+    fn aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int, aslr_enabled: bool) -> *mut raw::c_void;
     fn aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int;
     fn aslr_dlsym(handle: *mut raw::c_void, symbol: *const raw::c_char) -> *mut raw::c_void;
     fn rust_libloading_dlerror_mutex_lock();
     fn rust_libloading_dlerror_mutex_unlock();
 }
 
-unsafe fn rust_aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int) -> *mut raw::c_void {
-    aslr_dlopen(filename, flags)
+unsafe fn rust_aslr_dlopen(filename: *const raw::c_char, flags: raw::c_int, aslr_enabled: bool) -> *mut raw::c_void {
+    aslr_dlopen(filename, flags, aslr_enabled)
 }
 
 unsafe fn rust_aslr_dlclose(handle: *mut raw::c_void) -> raw::c_int {
@@ -113,8 +113,8 @@ impl Library {
     ///
     /// Corresponds to `dlopen(filename, RTLD_NOW)`.
     #[inline]
-    pub fn new<P: AsRef<OsStr>>(filename: P) -> ::Result<Library> {
-        Library::open(Some(filename), RTLD_NOW)
+    pub fn new<P: AsRef<OsStr>>(filename: P, aslr_enabled: bool) -> ::Result<Library> {
+        Library::open(Some(filename), RTLD_NOW, aslr_enabled)
     }
 
     /// Load the dynamic libraries linked into main program.
@@ -125,7 +125,7 @@ impl Library {
     /// Corresponds to `dlopen(NULL, RTLD_NOW)`.
     #[inline]
     pub fn this() -> Library {
-        Library::open(None::<&OsStr>, RTLD_NOW).unwrap()
+        Library::open(None::<&OsStr>, RTLD_NOW, false).unwrap()
     }
 
     /// Find and load a shared library (module).
@@ -136,7 +136,7 @@ impl Library {
     /// If the `filename` is None, null pointer is passed to `dlopen`.
     ///
     /// Corresponds to `dlopen(filename, flags)`.
-    pub fn open<P>(filename: Option<P>, flags: raw::c_int) -> ::Result<Library>
+    pub fn open<P>(filename: Option<P>, flags: raw::c_int, aslr_enabled: bool) -> ::Result<Library>
     where P: AsRef<OsStr> {
         let filename = match filename {
             None => None,
@@ -147,7 +147,7 @@ impl Library {
                 let r = rust_aslr_dlopen(match filename {
                     None => ptr::null(),
                     Some(ref f) => f.as_ptr()
-                }, flags);
+                }, flags, aslr_enabled);
                 // ensure filename lives until dlopen completes
                 drop(filename);
                 r

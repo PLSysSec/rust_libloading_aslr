@@ -31,6 +31,8 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <mutex>
+#include <shared_mutex>
 
 struct RangeLine {
     bool found;
@@ -115,9 +117,13 @@ struct LoadedLibInfo {
 };
 
 std::map<std::string, LoadedLibInfo> libInfo;
+std::shared_mutex mutex_libInfo;
 
+// A marker to separate a regular library from an ASLR lib
+const uint64_t ASLR_MARKER = 0xdeadbeefdeadbeef;
 
 struct ASLRLib {
+    uint64_t alsr_marker;
     void* libBase;
     uint32_t offset;
     uint64_t length;
@@ -131,9 +137,10 @@ extern "C"
 {
 __attribute__((weak))
  void aslr_load_library_info() {
-    libInfo.clear();
-
     std::vector<RangeLine> ranges = loadRanges();
+
+    std::unique_lock lock(mutex_libInfo);
+    libInfo.clear();
     for(auto& r : ranges){
         auto it = libInfo.find(r.path);
 
@@ -170,15 +177,6 @@ __attribute__((weak))
     }
 }
 
-__attribute__((weak))
-void aslr_dl_enable() {
-    aslr_enabled = true;
-}
-__attribute__((weak))
-void aslr_dl_disable() {
-    aslr_enabled = false;
-}
-
 #define PAGE_SIZE (4 * 1024)
 static std::random_device dev;
 static std::mt19937 rng(dev());
@@ -186,10 +184,12 @@ static std::uniform_int_distribution<std::mt19937::result_type> dist(0, (PAGE_SI
 
 
 __attribute__((weak))
-void* aslr_dlopen(const char* libName, int flag) {
+void* aslr_dlopen(const char* libName, int flag, bool aslr_enabled) {
     if (!aslr_enabled) {
         return dlopen(libName, flag);
     }
+
+    std::shared_lock lock(mutex_libInfo);
     auto it = libInfo.find(libName);
     if (it == libInfo.end()) {
         // forcibly load - use RTLD_NOW always, not sure how delayed load would work here
@@ -198,7 +198,10 @@ void* aslr_dlopen(const char* libName, int flag) {
         if (!lib) {
             return nullptr;
         }
+        lock.unlock();
         aslr_load_library_info();
+        lock.lock();
+
         it = libInfo.find(libName);
         if (it == libInfo.end()) {
             // still couldn't find the lib
@@ -235,6 +238,7 @@ void* aslr_dlopen(const char* libName, int flag) {
     }
 
     auto ret = new ASLRLib;
+    ret->alsr_marker = ASLR_MARKER;
     ret->libBase = target;
     ret->offset = chosen_page_offset;
     ret->length = total_size;
@@ -243,9 +247,13 @@ void* aslr_dlopen(const char* libName, int flag) {
     return ret;
 }
 
+bool is_aslr_lib(ASLRLib* lib) {
+    return lib->alsr_marker == ASLR_MARKER;
+}
+
 __attribute__((weak))
 int aslr_dlclose(ASLRLib* lib) {
-    if (!aslr_enabled) {
+    if (!is_aslr_lib(lib)) {
         return dlclose(lib);
     }
     munmap(lib->libBase, lib->length);
@@ -255,7 +263,7 @@ int aslr_dlclose(ASLRLib* lib) {
 
 __attribute__((weak))
 void* aslr_dlsym(ASLRLib* lib, const char *symbol) {
-    if (!aslr_enabled) {
+    if (!is_aslr_lib(lib)) {
         return dlsym(lib, symbol);
     }
 

@@ -114,8 +114,8 @@ impl Library {
     /// let _ = Library::new("../awesome.module").unwrap();
     /// let _ = Library::new("libsomelib.so.1").unwrap();
     /// ```
-    pub fn new<P: AsRef<OsStr>>(filename: P) -> Result<Library> {
-        imp::Library::new(filename).map(From::from)
+    pub fn new<P: AsRef<OsStr>>(filename: P, aslr_enabled: bool) -> Result<Library> {
+        imp::Library::new(filename, aslr_enabled).map(From::from)
     }
 
     /// Get a pointer to function or static variable by symbol name.

@@ -28,6 +28,7 @@ fn main(){
     cc::Build::new()
         .cpp(true)
         .file("src/os/unix/aslrloader.cpp")
+        .flag("-std=c++17")
         .compile("aslrloader");
 
     if is_unix {
