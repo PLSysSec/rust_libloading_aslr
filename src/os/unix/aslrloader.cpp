@@ -9,6 +9,7 @@
 #define mozilla_throw_gcc_h
 #define mozilla_mozalloc_abort_h
 
+#include <linux/limits.h>
 #include <link.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -189,12 +190,19 @@ void* aslr_dlopen(const char* libName, int flag, bool aslr_enabled) {
         return dlopen(libName, flag);
     }
 
+    char fullPath [PATH_MAX+1];
+
+    if (!realpath(libName, fullPath)) {
+        printf("Could not execute realpath!\n");
+        abort();
+    }
+
     std::shared_lock lock(mutex_libInfo);
-    auto it = libInfo.find(libName);
+    auto it = libInfo.find(fullPath);
     if (it == libInfo.end()) {
         // forcibly load - use RTLD_NOW always, not sure how delayed load would work here
         (void) flag;
-        void* lib = dlopen(libName, RTLD_NOW);
+        void* lib = dlopen(fullPath, RTLD_NOW);
         if (!lib) {
             return nullptr;
         }
@@ -202,7 +210,7 @@ void* aslr_dlopen(const char* libName, int flag, bool aslr_enabled) {
         aslr_load_library_info();
         lock.lock();
 
-        it = libInfo.find(libName);
+        it = libInfo.find(fullPath);
         if (it == libInfo.end()) {
             // still couldn't find the lib
             return nullptr;
