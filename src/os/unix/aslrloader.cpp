@@ -132,8 +132,6 @@ struct ASLRLib {
     void* originalLibBase;
 };
 
-bool aslr_enabled = false;
-
 extern "C"
 {
 __attribute__((weak))
