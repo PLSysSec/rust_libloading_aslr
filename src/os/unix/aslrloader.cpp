@@ -176,11 +176,64 @@ __attribute__((weak))
     }
 }
 
+bool no_locks = false;
+__attribute__((weak))
+ void aslr_library_preload() {
+     aslr_load_library_info();
+    no_locks = true;
+ }
+
 #define PAGE_SIZE (4 * 1024)
 static std::random_device dev;
 static std::mt19937 rng(dev());
 static std::uniform_int_distribution<std::mt19937::result_type> dist(0, (PAGE_SIZE/16) - 1);
 
+
+__attribute__((weak))
+void* aslr_dlopen_nolock(const char* fullPath) {
+
+    auto it = libInfo.find(fullPath);
+    if (it == libInfo.end()) {
+        return nullptr;
+    }
+
+    auto& curr = it->second;
+    std::vector<Range>& ranges = curr.library_ranges;
+    char* start = ranges[0].start;
+    char* end = ranges[ranges.size() - 1].end;
+    size_t total_size = end - start;
+
+    // we are also going to copy pages starting at a random offset in the page
+    // so add one extra page to catch the spill overs
+    total_size += PAGE_SIZE;
+
+    // we want an alignment of 16, so we pick a value between 0 and PAGE_SIZE/16 and multiply by 16
+    uint32_t chosen_page_offset = dist(rng) * 16;
+
+    // printf("total_size: %lu\n", (uint64_t)total_size);
+    char* target = (char*) mmap(NULL, total_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (!target || target == MAP_FAILED) {
+        return nullptr;
+    }
+
+    for(auto& r : ranges) {
+        uint64_t offset = r.start - start + chosen_page_offset;
+        uint64_t size = r.end - r.start;
+        // printf("target + offset: %p\n", (void*)(target + offset));
+        // printf("r.start: %p\n", (void*)(r.start));
+        // printf("size: %lu\n", (uint64_t)(size));
+        memcpy(target + offset, r.start, size);
+    }
+
+    auto ret = new ASLRLib;
+    ret->alsr_marker = ASLR_MARKER;
+    ret->libBase = target;
+    ret->offset = chosen_page_offset;
+    ret->length = total_size;
+    ret->originalLib = curr.originalLib;
+    ret->originalLibBase = start;
+    return ret;
+}
 
 __attribute__((weak))
 void* aslr_dlopen(const char* libName, int flag, bool aslr_enabled) {
@@ -193,6 +246,10 @@ void* aslr_dlopen(const char* libName, int flag, bool aslr_enabled) {
     if (!realpath(libName, fullPath)) {
         printf("Could not execute realpath!\n");
         abort();
+    }
+
+    if (no_locks) {
+        return aslr_dlopen_nolock(fullPath);
     }
 
     std::shared_lock lock(mutex_libInfo);
